@@ -5,53 +5,77 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>KryptSafe Privacy Policy</title>
 <style>
-  body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:720px;margin:0 auto;padding:32px 20px;line-height:1.6;color:#1b1b1b}
-  h1{font-size:28px;margin-bottom:4px} h2{font-size:19px;margin-top:32px} .meta{color:#666;font-size:14px}
+  body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:760px;margin:0 auto;padding:32px 20px 64px;line-height:1.65;color:#1b1b1b}
+  h1{font-size:30px;margin-bottom:4px} h2{font-size:20px;margin-top:36px;border-top:1px solid #e5e5e5;padding-top:24px}
+  .meta{color:#666;font-size:14px} .box{background:#f6f6f6;border-radius:12px;padding:4px 20px;margin:20px 0}
+  table{border-collapse:collapse;width:100%;font-size:15px} td,th{border:1px solid #ddd;padding:8px 10px;text-align:left;vertical-align:top} th{background:#f6f6f6}
 </style>
 </head>
 <body>
 <h1>KryptSafe Privacy Policy</h1>
-<p class="meta">Effective date: November 20, 2026 &middot; App: KryptSafe (com.kryptsafe) &middot; Publisher: Ziriverse</p>
+<p class="meta">Effective date: November 20, 2026 &middot; Last updated: November 20, 2026<br>App: KryptSafe (package com.kryptsafe) &middot; Publisher: Ziriverse</p>
 
-<p>KryptSafe is a private, encrypted vault for photos, videos and documents. It is designed so that your data stays on your phone and is never available to us or anyone else.</p>
+<p>This Privacy Policy explains how KryptSafe ("the app", "we", "us") handles information. KryptSafe is a private, encrypted vault for photos, videos and documents that works entirely on your device. We built it so that we never have access to your data.</p>
 
-<h2>Summary</h2>
+<div class="box">
+<h3>In short</h3>
 <ul>
-  <li>We do not collect, store, transmit or share any personal data.</li>
-  <li>KryptSafe has no internet permission and cannot connect to any network.</li>
-  <li>There are no accounts, no analytics, no advertising and no third-party tracking.</li>
+  <li>We do not collect, receive, store, sell or share any personal data.</li>
+  <li>KryptSafe does not request the internet permission, so it cannot send anything off your device.</li>
+  <li>No accounts, no analytics, no advertising, no crash-reporting or tracking services.</li>
+  <li>Your files are encrypted on your phone. We cannot read them or recover them.</li>
 </ul>
+</div>
 
-<h2>Information we collect</h2>
-<p>None. Ziriverse does not receive any information from the app. Nothing you add to KryptSafe, and nothing about how you use it, is sent to us.</p>
+<h2>1. Information we collect</h2>
+<p>None. The app does not transmit any information to Ziriverse or to any third party, and we operate no servers that receive data from the app. This includes your files, file names, usage activity, device identifiers, location, contacts and your PIN, passphrase or biometric data.</p>
 
-<h2>Files you add</h2>
-<p>Files you import are encrypted on your device with AES-256-GCM and stored only in the app's private storage. They are decrypted in memory only while you view them. Encrypted files never leave your phone unless you use the Restore (export) feature to save a decrypted copy to a location you choose. Exported copies are not encrypted, and you are responsible for protecting them.</p>
+<h2>2. How the app works with your data</h2>
+<p>Everything described here happens locally on your device.</p>
+<table>
+<tr><th>Item</th><th>What happens</th></tr>
+<tr><td>Photos, videos, documents you import</td><td>Chosen by you through the Android picker, then encrypted with AES-256-GCM and stored in the app's private storage. File names, types and dates are encrypted along with the content. Files are decrypted in memory only while you view them, and no readable copies are written to the gallery or cache.</td></tr>
+<tr><td>PIN or passphrase</td><td>Never stored. It is used to derive a key (Argon2id) that protects your vault's master key. The wrapped key is additionally protected by the Android Keystore, which uses your phone's secure hardware where available.</td></tr>
+<tr><td>Fingerprint / face unlock</td><td>Handled entirely by Android's biometric system. The app receives only a yes/no result and never sees or stores biometric data.</td></tr>
+<tr><td>Failed-attempt counters</td><td>Stored encrypted on your device to enforce temporary lockouts and, if you turn it on, erase after repeated wrong attempts.</td></tr>
+<tr><td>Settings (auto-lock, erase option)</td><td>Stored on your device only.</td></tr>
+</table>
 
-<h2>Your PIN, passphrase and fingerprint</h2>
-<p>Your PIN or passphrase is never stored. It is used to derive an encryption key (using Argon2id), which protects your vault key. That key is additionally protected by the Android Keystore on your device. If you enable fingerprint unlock, authentication is handled entirely by Android; KryptSafe never receives or stores your fingerprint data.</p>
-<p><strong>We cannot recover your PIN, passphrase or files.</strong> If you forget your credential, or if you enable "Erase after failed attempts" and the limit is reached, your vault is permanently unrecoverable.</p>
-
-<h2>Permissions</h2>
+<h2>3. Permissions</h2>
 <ul>
-  <li><strong>No internet permission.</strong> The app cannot send data off your device.</li>
-  <li><strong>Photos, videos and files:</strong> accessed only through the Android picker for items you choose to import, and to remove the originals if you ask.</li>
+  <li><strong>No internet permission.</strong> The app cannot connect to a network.</li>
+  <li><strong>Media and files:</strong> accessed only for items you select to import, and, if you ask, to remove the original after import (Android asks for your consent each time).</li>
   <li><strong>Biometric:</strong> used only to unlock the app, through Android's system prompt.</li>
+  <li><strong>Overlay protection:</strong> the app asks Android to hide other apps' overlay windows over it, to defend against tap-jacking. No data is involved.</li>
 </ul>
 
-<h2>Third parties</h2>
-<p>KryptSafe contains no advertising, analytics or tracking services, and we share no data with third parties. The app includes open-source components for video playback and encryption; these run entirely on your device.</p>
+<h2>4. Export (Restore) feature</h2>
+<p>If you choose to export files, KryptSafe saves a decrypted copy to a folder you select. Exported copies are no longer protected by the vault, and other apps on your device may be able to read them. You are responsible for protecting exported files. The app shows a warning before exporting.</p>
 
-<h2>Children</h2>
-<p>KryptSafe is a general-purpose utility and does not knowingly collect any information from anyone, including children.</p>
+<h2>5. Sharing and third parties</h2>
+<p>We do not share information with anyone, because we do not have any. The app contains no advertising, analytics or tracking code. It includes open-source software for video playback and encryption (such as Android Media3, VLC and Argon2); these components run entirely on your device and do not send data anywhere.</p>
 
-<h2>Data deletion</h2>
-<p>All your data is stored on your device. Deleting items in the app removes them from the vault. Uninstalling the app, or clearing its storage, permanently deletes everything. We hold no copy and have nothing to delete on our side.</p>
+<h2>6. Data security</h2>
+<p>The app uses AES-256-GCM encryption, Argon2id key derivation, Android Keystore protection, tamper-resistant lockout counters, and blocks screenshots and screen recording in release builds. No system is perfectly secure; in particular, a short PIN is easier to guess than a long passphrase, and malware on a compromised device may be able to view content while the vault is open. We recommend a passphrase or longer PIN and keeping your device updated.</p>
 
-<h2>Changes to this policy</h2>
-<p>If this policy changes, we will update the effective date above and publish the new version at this address.</p>
+<h2>7. Data retention and deletion</h2>
+<p>Your data stays on your device until you delete it. Deleting items in the app removes them from the vault. Uninstalling the app, clearing its storage, or triggering the optional "Erase after failed attempts" feature permanently deletes your vault and its keys. Because we hold no copies, we have nothing to delete or return on our side.</p>
 
-<h2>Contact</h2>
-<p>Ziriverse &middot; <a href="mailto:ziriverse@gmail.com">ziriverse@gmail.com</a></p>
+<h2>8. Important: no recovery</h2>
+<p>We cannot reset your PIN or passphrase or recover your files. If you forget your credential, or the vault is erased, your data is permanently inaccessible. Android backups of the app's data are disabled.</p>
+
+<h2>9. Your rights</h2>
+<p>Under laws such as the GDPR and CCPA, you may have rights to access, correct, delete or port personal data we hold about you, or to opt out of its sale. Because KryptSafe does not collect or hold personal data, and we do not sell or share it, there is no data for us to provide or delete. You control all of your data directly within the app and on your device.</p>
+
+<h2>10. Children's privacy</h2>
+<p>KryptSafe is a general-purpose utility and is not directed at children. Because we collect no information from anyone, we do not knowingly collect personal information from children.</p>
+
+<h2>11. Changes to this policy</h2>
+<p>We may update this policy from time to time. The latest version will always be available at this address with its updated date. If we ever change how the app handles data, we will update this policy before the change takes effect.</p>
+
+<h2>12. Contact us</h2>
+<p>Questions about this policy or the app:<br>
+Ziriverse<br>
+Email: <a href="mailto:ziriverse@gmail.com">ziriverse@gmail.com</a></p>
 </body>
 </html>
