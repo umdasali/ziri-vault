@@ -41,7 +41,10 @@ class VaultStore(private val context: Context) {
     /** What the user unlocks with. Not secret (it only decides which keypad/field to show). */
     var credentialKind: CredentialKind
         get() = CredentialKind.fromId(settings.getInt("cred_kind", CredentialKind.PIN6.id))
-        private set(v) { settings.edit().putInt("cred_kind", v.id).apply() }
+        private set(v) { settings.edit().putInt("cred_kind", v.id).commit() } // synchronous: must hit disk before we move on
+
+    /** After a successful unlock with a different keypad than recorded (e.g. a crash between two writes), repair the record. */
+    fun correctKind(k: CredentialKind) { if (k != credentialKind) credentialKind = k }
 
     /** 0 = never. Otherwise the vault is destroyed after this many wrong attempts in a row. Opt-in, off by default. */
     var wipeAfter: Int

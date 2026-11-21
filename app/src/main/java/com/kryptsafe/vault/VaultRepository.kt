@@ -31,11 +31,26 @@ class VaultRepository(private val context: Context) {
     private fun itemFile(id: String) = File(itemsDir, "$id.ksf")
     private fun thumbFile(id: String) = File(thumbsDir, "$id.ksf")
 
-    fun list(): List<VaultItem> = (itemsDir.listFiles { f -> f.extension == "ksf" } ?: emptyArray())
-        .mapNotNull { f ->
-            runCatching { VaultFormat.Reader(f, key()).use { VaultItem(f.nameWithoutExtension, it.meta, it.size) } }.getOrNull()
-        }
-        .sortedByDescending { it.meta.importedAt }
+    /**
+     * Unreadable files (damaged, or opened with the wrong key) are listed as "Damaged item" instead of silently vanishing,
+     * so the user can see something is wrong and delete them.
+     */
+    fun list(): List<VaultItem> {
+        cleanStaleTemps()
+        return (itemsDir.listFiles { f -> f.extension == "ksf" } ?: emptyArray())
+            .map { f ->
+                runCatching { VaultFormat.Reader(f, key()).use { VaultItem(f.nameWithoutExtension, it.meta, it.size) } }.getOrElse {
+                    VaultItem(f.nameWithoutExtension, FileMeta("Damaged item", "application/octet-stream", MediaKind.OTHER, 0), f.length())
+                }
+            }
+            .sortedByDescending { it.meta.importedAt }
+    }
+
+    /** A killed import leaves a half-written encrypted .tmp behind; remove any that no running import can still own. */
+    private fun cleanStaleTemps() {
+        val cutoff = System.currentTimeMillis() - 10 * 60 * 1000
+        itemsDir.listFiles { f -> f.extension == "tmp" && f.lastModified() < cutoff }?.forEach { it.delete() }
+    }
 
     fun openReader(id: String) = VaultFormat.Reader(itemFile(id), key())
     fun itemFileFor(id: String): File = itemFile(id)

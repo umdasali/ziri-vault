@@ -20,14 +20,28 @@ class VlcEngine(
     private val onUnplayable: (String) -> Unit,
 ) : VideoEngine() {
     override val kind = EngineKind.VLC
+    // Opened first so a damaged file throws before any native VLC object exists (nothing to leak).
     private var source = ProxyFdSource(context, openReader())
-    private val vlc = LibVLC(context, arrayListOf("--avcodec-hw=any"))
+    private val vlc = try { LibVLC(context, arrayListOf("--avcodec-hw=any")) } catch (e: Throwable) { source.close(); throw e }
     private val player = MediaPlayer(vlc)
     private var layout: VLCVideoLayout? = null
     private var released = false
     private var seekedToStart = false
 
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+    private val focusRequest = android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN)
+        .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA).setContentType(android.media.AudioAttributes.CONTENT_TYPE_MOVIE).build())
+        .setOnAudioFocusChangeListener { change ->
+            if (change == android.media.AudioManager.AUDIOFOCUS_LOSS || change == android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) runCatching { player.pause() }
+        }.build()
+    private val noisyReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: android.content.Intent?) { runCatching { player.pause() } } // headphones unplugged
+    }
+
     init {
+        audioManager.requestAudioFocus(focusRequest)
+        androidx.core.content.ContextCompat.registerReceiver(context, noisyReceiver,
+            android.content.IntentFilter(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY), androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
         player.setEventListener { e ->
             when (e.type) {
                 MediaPlayer.Event.Playing -> { state.playing = true; state.ended = false; state.buffering = false
@@ -115,6 +129,8 @@ class VlcEngine(
     override fun release() {
         if (released) return
         released = true
+        runCatching { context.unregisterReceiver(noisyReceiver) }
+        runCatching { audioManager.abandonAudioFocusRequest(focusRequest) }
         runCatching { player.stop() }
         runCatching { player.detachViews() }
         runCatching { player.release() }

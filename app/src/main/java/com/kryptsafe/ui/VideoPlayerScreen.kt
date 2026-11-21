@@ -79,11 +79,14 @@ fun VideoPlayerScreen(videos: List<VaultItem>, startId: String, vm: VaultViewMod
     var notice by remember { mutableStateOf<String?>(null) }
 
     val engine: VideoEngine = remember(item.id, kind) {
-        when (kind) {
-            EngineKind.EXO -> ExoEngine(context, vm::itemFile, item.id, item.meta.mime, resumeAt) { failure = it }
-            EngineKind.VLC -> VlcEngine(context, { vm.openReader(item.id) }, resumeAt) { failure = it }
-        }
+        try {
+            when (kind) {
+                EngineKind.EXO -> ExoEngine(context, vm::itemFile, item.id, item.meta.mime, resumeAt) { failure = it }
+                EngineKind.VLC -> VlcEngine(context, { vm.openReader(item.id) }, resumeAt) { failure = it }
+            }
+        } catch (e: Throwable) { com.kryptsafe.video.FailedEngine(kind) } // damaged file / native failure: show the error card, don't crash
     }
+    LaunchedEffect(engine) { if (engine is com.kryptsafe.video.FailedEngine) failure = "OPEN_FAILED" }
     DisposableEffect(engine) { onDispose { engine.release() } }
     // With a delayed auto-lock the vault stays open in the background — never keep playing audio there.
     DisposableEffect(engine) {

@@ -38,15 +38,40 @@ import com.kryptsafe.vault.ProxyFdSource
 import com.kryptsafe.vault.VaultItem
 import com.kryptsafe.vault.VaultViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+/** Owns the renderer. All use and closing happens under [lock], so leaving the screen can never close it mid-render. */
+private const val MAX_PAGE_WIDTH = 2200
+private const val MAX_PAGE_PIXELS = 6_000_000L
+
 private class PdfHolder {
-    var source: ProxyFdSource? = null
-    var renderer: PdfRenderer? = null
-    val lock = Mutex()
-    fun close() { runCatching { renderer?.close() }; runCatching { source?.close() }; renderer = null; source = null }
+    private var source: ProxyFdSource? = null
+    private var renderer: PdfRenderer? = null
+    private val lock = Mutex()
+    @Volatile private var closed = false
+    val isClosed get() = closed
+
+    private fun closeNow() { runCatching { renderer?.close() }; runCatching { source?.close() }; renderer = null; source = null }
+
+    /** Hands over a freshly opened renderer; if the screen was already closed, discards it instead of leaking it. */
+    suspend fun attach(src: ProxyFdSource, r: PdfRenderer): Boolean = lock.withLock {
+        if (closed) { runCatching { r.close() }; runCatching { src.close() }; false } else { source = src; renderer = r; true }
+    }
+
+    /** Runs [block] with the renderer, or returns null if there is none (not loaded yet, or closed). */
+    suspend fun <T> withRenderer(block: (PdfRenderer) -> T): T? = lock.withLock {
+        if (closed) null else renderer?.let(block)
+    }
+
+    fun close() {
+        closed = true
+        // If a page is being drawn right now, finish that first: the render path closes us when it releases the lock.
+        if (lock.tryLock()) { try { closeNow() } finally { lock.unlock() } }
+        else Thread { runBlocking { lock.withLock { closeNow() } } }.start()
+    }
 }
 
 /** Renders a vault PDF page by page. The file is decrypted on demand through an in-memory proxy file descriptor. */
@@ -61,13 +86,14 @@ fun PdfReaderScreen(item: VaultItem, vm: VaultViewModel, onClose: () -> Unit) {
 
     LaunchedEffect(item.id) {
         withContext(Dispatchers.IO) {
+            var src: ProxyFdSource? = null
             try {
-                val src = ProxyFdSource(context, vm.openReader(item.id))
-                holder.source = src
+                src = ProxyFdSource(context, vm.openReader(item.id))
                 val r = PdfRenderer(src.descriptor)
-                holder.renderer = r
-                pageCount = r.pageCount
+                val count = r.pageCount
+                if (holder.attach(src, r)) pageCount = count
             } catch (e: Exception) {
+                runCatching { src?.close() }
                 error = "This PDF can't be opened (it may be damaged or password-protected)."
             }
         }
@@ -114,25 +140,37 @@ fun PdfReaderScreen(item: VaultItem, vm: VaultViewModel, onClose: () -> Unit) {
 
 @Composable
 private fun PdfPage(holder: PdfHolder, index: Int, targetPx: Int) {
-    val bmp by produceState<Bitmap?>(null, index, targetPx) {
+    // Cap the page bitmap (width and total pixels) so big pages / high zoom can't run the phone out of memory.
+    // The image is drawn FillWidth, so a capped page just renders slightly softer.
+    val rendered by produceState<Pair<Bitmap?, Boolean>>(null to false, index, targetPx) {
         value = withContext(Dispatchers.IO) {
-            holder.lock.withLock {
-                val r = holder.renderer ?: return@withLock null
+            val ok = holder.withRenderer { r ->
                 runCatching {
                     r.openPage(index).use { p ->
-                        val h = (targetPx.toFloat() * p.height / p.width).toInt().coerceAtLeast(1)
-                        Bitmap.createBitmap(targetPx, h, Bitmap.Config.ARGB_8888).also {
+                        var w = targetPx.coerceIn(1, MAX_PAGE_WIDTH)
+                        var h = (w.toFloat() * p.height / p.width).toInt().coerceAtLeast(1)
+                        if (w.toLong() * h > MAX_PAGE_PIXELS) {
+                            val s = Math.sqrt(MAX_PAGE_PIXELS.toDouble() / (w.toDouble() * h)).toFloat()
+                            w = (w * s).toInt().coerceAtLeast(1); h = (h * s).toInt().coerceAtLeast(1)
+                        }
+                        Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also {
                             it.eraseColor(AColor.WHITE)
                             p.render(it, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                         }
                     }
                 }.getOrNull()
             }
+            ok to (ok == null && !holder.isClosed)
         }
     }
+    val bmp = rendered.first
+    val failed = rendered.second
     val shape = RoundedCornerShape(14.dp)
     val b = bmp
-    if (b != null) Image(b.asImageBitmap(), "Page ${index + 1}", Modifier.fillMaxWidth().clip(shape).border(1.dp, Hairline, shape), contentScale = ContentScale.FillWidth)
+    if (failed) Box(Modifier.fillMaxWidth().aspectRatio(0.72f).clip(shape).background(CardBg), contentAlignment = Alignment.Center) {
+        Text("This page can't be shown", fontSize = 13.sp, color = TextSecondary)
+    }
+    else if (b != null) Image(b.asImageBitmap(), "Page ${index + 1}", Modifier.fillMaxWidth().clip(shape).border(1.dp, Hairline, shape), contentScale = ContentScale.FillWidth)
     else Box(Modifier.fillMaxWidth().aspectRatio(0.72f).clip(shape).background(CardBg), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(color = Color.White.copy(0.7f), modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
     }

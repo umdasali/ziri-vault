@@ -55,7 +55,7 @@ fun AuthScreen(
     showBrand: Boolean = true,
     kind: CredentialKind = CredentialKind.PIN6,
     onBack: (() -> Unit)? = null,
-    /** When set, shows a "Use a longer PIN or passphrase" link (first-time setup). */
+    /** When set, shows a link to pick the unlock type: "Use a longer PIN or passphrase" at setup, "Use a different unlock method" when unlocking. */
     onChooseKind: (() -> Unit)? = null,
     onPin: (CharArray) -> Unit,
     onBiometric: () -> Unit,
@@ -147,7 +147,7 @@ fun AuthScreen(
                     if (onChooseKind != null) {
                         Spacer(Modifier.height(18.dp))
                         Text(
-                            "Use a longer PIN or passphrase", fontSize = 13.sp, color = TextSecondary, fontWeight = FontWeight.Medium,
+                            if (mode == AuthMode.UNLOCK) "Use a different unlock method" else "Use a longer PIN or passphrase", fontSize = 13.sp, color = TextSecondary, fontWeight = FontWeight.Medium,
                             modifier = Modifier.clip(CircleShape).clickable(onClick = onChooseKind).padding(horizontal = 14.dp, vertical = 8.dp),
                         )
                     }

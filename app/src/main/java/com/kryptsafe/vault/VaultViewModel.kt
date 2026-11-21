@@ -30,10 +30,12 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
 
     fun import(uris: List<Uri>) {
         if (uris.isEmpty()) return
+        if (!Session.isUnlocked) { message = "The vault was locked while you were choosing files. Unlock it and try again."; return }
         viewModelScope.launch {
             val ok = mutableListOf<Uri>(); var failed = 0
             withContext(Dispatchers.IO) {
                 uris.forEachIndexed { i, u ->
+                    if (!Session.isUnlocked) { failed += uris.size - i; return@withContext } // locked mid-import: stop, don't spam errors
                     busyMessage = "Encrypting ${i + 1} of ${uris.size}…"
                     runCatching { repo.import(u) }.onSuccess { ok += u }.onFailure { failed++ }
                 }
@@ -57,11 +59,12 @@ class VaultViewModel(app: Application) : AndroidViewModel(app) {
             ids.forEachIndexed { i, id ->
                 busyMessage = "Restoring ${i + 1} of ${ids.size}…"
                 val item = items.firstOrNull { it.id == id } ?: return@forEachIndexed
+                var out: androidx.documentfile.provider.DocumentFile? = null
                 runCatching {
-                    val out = dir.createFile(item.meta.mime, item.meta.name) ?: error("create failed")
-                    getApplication<Application>().contentResolver.openOutputStream(out.uri)!!.use { repo.exportTo(id, it) }
+                    out = dir.createFile(item.meta.mime, item.meta.name) ?: error("create failed")
+                    getApplication<Application>().contentResolver.openOutputStream(out!!.uri)!!.use { repo.exportTo(id, it) }
                     done++
-                }
+                }.onFailure { runCatching { out?.delete() } } // never leave a half-written plaintext file behind
             }
         }
         busyMessage = null

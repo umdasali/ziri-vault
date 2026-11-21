@@ -30,7 +30,11 @@ class ExoEngine(
     private val onUnplayable: (String) -> Unit,
 ) : VideoEngine() {
     override val kind = EngineKind.EXO
-    private val player: ExoPlayer = ExoPlayer.Builder(context).build()
+    private val player: ExoPlayer = ExoPlayer.Builder(context)
+        // Respect audio focus (calls, other apps) and stop when headphones are unplugged, so private audio never blasts from the speaker.
+        .setAudioAttributes(androidx.media3.common.AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
+        .setHandleAudioBecomingNoisy(true)
+        .build()
     private var view: PlayerView? = null
     private var tracks: Tracks = Tracks.EMPTY
 

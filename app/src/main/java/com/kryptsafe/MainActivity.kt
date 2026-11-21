@@ -86,14 +86,21 @@ class MainActivity : FragmentActivity() {
                 val sender = MediaStore.createDeleteRequest(contentResolver, mediaUris).intentSender
                 deleteRequest.launch(IntentSenderRequest.Builder(sender).build())
                 return
-            } catch (e: Exception) { android.util.Log.w("KryptSafe", "createDeleteRequest failed for " + uris.firstOrNull(), e); externalUi = false }
+            } catch (e: Exception) { android.util.Log.w("KryptSafe", "createDeleteRequest failed: ${e.javaClass.simpleName}"); externalUi = false }
         }
         val n = vm.deleteOriginalsDirectly(uris)
         vm.message = if (n == uris.size) "Originals deleted" else "Could not delete $n of ${uris.size} originals — remove them from your gallery manually"
         vm.deletable = emptyList()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // The folder picker can outlive our process; remember what was being exported so the result isn't dropped.
+        outState.putStringArray("export_ids", pendingExportIds.toTypedArray())
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        savedInstanceState?.getStringArray("export_ids")?.let { pendingExportIds = it.toSet() }
         // Must run before super.onCreate: swaps the splash theme for the real one once the first frame is ready.
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -211,7 +218,7 @@ class MainActivity : FragmentActivity() {
                         biometricAvailable = bioEnabled && bio.isAvailable(),
                         onBiometric = { tryBiometric { error = it } },
                         busy = busy,
-                        onChooseKind = if (mode == AuthMode.SETUP_ENTER) ({ showKindPicker = true }) else null,
+                        onChooseKind = if (mode == AuthMode.SETUP_ENTER || mode == AuthMode.UNLOCK) ({ showKindPicker = true }) else null,
                         onPin = { pin ->
                             error = null
                             when (mode) {
@@ -225,9 +232,11 @@ class MainActivity : FragmentActivity() {
                                         busy = true
                                         scope.launch {
                                             // The key stretching is deliberately slow: never run it on the main thread.
-                                            withContext(Dispatchers.Default) { store.setUp(pin, kind) }
+                                            val r = withContext(Dispatchers.Default) { runCatching { store.setUp(pin, kind) } }
                                             pin.fill('0'); firstPin?.fill('0'); firstPin = null
-                                            busy = false; unlocked = true
+                                            busy = false
+                                            if (r.isSuccess) unlocked = true
+                                            else { error = "Couldn't secure the vault on this phone. Please try again."; mode = AuthMode.SETUP_ENTER }
                                         }
                                     } else { error = "They didn't match. Start again."; firstPin?.fill('0'); firstPin = null; mode = AuthMode.SETUP_ENTER; pin.fill('0') }
                                 AuthMode.UNLOCK -> {
@@ -235,7 +244,7 @@ class MainActivity : FragmentActivity() {
                                     scope.launch {
                                         val result = withContext(Dispatchers.Default) { runCatching { store.unlockWithPin(pin) } }
                                         pin.fill('0'); busy = false
-                                        result.onSuccess { unlocked = true }.onFailure { e ->
+                                        result.onSuccess { store.correctKind(kind); unlocked = true }.onFailure { e ->
                                             if (e is com.kryptsafe.vault.VaultWipedException) { onVaultWiped(); return@onFailure }
                                             error = when (e) {
                                                 is WrongPinException -> "Wrong ${kind.noun}" + (store.attemptsLeftBeforeWipe()?.takeIf { it <= 3 }?.let { " — $it attempts left before the vault is erased" }
@@ -255,7 +264,7 @@ class MainActivity : FragmentActivity() {
                         onDismissRequest = { showKindPicker = false },
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp), containerColor = com.kryptsafe.ui.theme.CardBg,
                         title = { Text("How do you want to unlock?", fontWeight = androidx.compose.ui.text.font.FontWeight.Medium) },
-                        text = { CredentialKindList(current = kind) { kind = it; showKindPicker = false; firstPin?.fill('0'); firstPin = null; mode = AuthMode.SETUP_ENTER } },
+                        text = { CredentialKindList(current = kind) { kind = it; showKindPicker = false; firstPin?.fill('0'); firstPin = null; error = null; mode = if (store.isSetUp) AuthMode.UNLOCK else AuthMode.SETUP_ENTER } },
                         confirmButton = {},
                         dismissButton = { TextButton(onClick = { showKindPicker = false }) { Text("Cancel", color = com.kryptsafe.ui.theme.TextSecondary) } },
                     )
@@ -274,7 +283,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun tryBiometric(onError: (String?) -> Unit) =
-        bio.unlock({ key -> Session.open(key); unlocked = true }, { msg -> onError(msg) })
+        bio.unlock({ key -> Session.open(key); unlocked = true }, { msg -> onError(msg.ifBlank { null }) })
 
     /** The opt-in erase limit was hit: everything is already destroyed; restart into first-time setup. */
     private fun onVaultWiped() {

@@ -28,6 +28,23 @@ class VideoState {
     var error by mutableStateOf<String?>(null)
 }
 
+/** Stand-in used when an engine can't even be created (damaged file, native library problem) so the UI shows an error instead of crashing. */
+class FailedEngine(override val kind: EngineKind) : VideoEngine() {
+    init { state.buffering = false; state.error = "OPEN_FAILED" }
+    override fun createView(context: Context): View = View(context)
+    override fun play() {}
+    override fun pause() {}
+    override fun seekTo(ms: Long) {}
+    override fun setSpeed(speed: Float) {}
+    override fun setMuted(muted: Boolean) {}
+    override fun setLoop(loop: Boolean) {}
+    override fun setFill(fill: Boolean) {}
+    override fun selectAudio(id: String) {}
+    override fun selectText(id: String?) {}
+    override fun poll() {}
+    override fun release() {}
+}
+
 enum class EngineKind(val label: String) { EXO("Standard"), VLC("Compatibility") }
 
 /** A video playback backend. Both implementations read the encrypted vault file and decrypt in memory only. */

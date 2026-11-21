@@ -41,7 +41,11 @@ class BiometricHelper(private val activity: FragmentActivity, private val store:
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
             .setUserAuthenticationRequired(true)
-            .setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+            // setUserAuthenticationParameters is API 30+; on 26-29 -1 means "authenticate for every use".
+            .apply {
+                if (android.os.Build.VERSION.SDK_INT >= 30) setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+                else @Suppress("DEPRECATION") setUserAuthenticationValidityDurationSeconds(-1)
+            }
             .setInvalidatedByBiometricEnrollment(true)
             .build()
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
@@ -56,21 +60,27 @@ class BiometricHelper(private val activity: FragmentActivity, private val store:
             override fun onAuthenticationSucceeded(r: BiometricPrompt.AuthenticationResult) {
                 r.cryptoObject?.cipher?.let(onOk) ?: onFail("No cipher")
             }
-            override fun onAuthenticationError(code: Int, msg: CharSequence) = onFail(msg.toString())
+            override fun onAuthenticationError(code: Int, msg: CharSequence) {
+                // The user tapping "Use PIN" / backing out isn't an error: stay quiet and show the PIN pad.
+                val quiet = code == BiometricPrompt.ERROR_NEGATIVE_BUTTON || code == BiometricPrompt.ERROR_USER_CANCELED || code == BiometricPrompt.ERROR_CANCELED
+                onFail(if (quiet) "" else msg.toString())
+            }
         }).authenticate(info, BiometricPrompt.CryptoObject(cipher))
     }
 
     /** Call while unlocked (master key in Session). Wraps it under the biometric-gated key. */
     fun enable(masterKey: ByteArray, onDone: (Boolean) -> Unit) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key(true)) }
+        // Copy: if the vault locks while the prompt is up, Session zeroes the original and we'd wrap an all-zero key.
+        val keyCopy = masterKey.copyOf()
         prompt(cipher, "Enable biometric unlock", { c ->
-            store.writeBio(byteArrayOf(c.iv.size.toByte()) + c.iv + c.doFinal(masterKey)); onDone(true)
+            try { store.writeBio(byteArrayOf(c.iv.size.toByte()) + c.iv + c.doFinal(keyCopy)); onDone(true) } finally { keyCopy.fill(0) }
         }, { onDone(false) })
     }
 
     fun unlock(onKey: (ByteArray) -> Unit, onFail: (String) -> Unit) {
         val blob = store.readBio() ?: return onFail("Biometric not set up")
-        val k = key(false) ?: return onFail("Biometric key missing").also { store.clearBio() }
+        val k = runCatching { key(false) }.getOrNull() ?: return onFail("Biometric key missing").also { store.clearBio() }
         val ivLen = blob[0].toInt()
         val iv = blob.copyOfRange(1, 1 + ivLen)
         val ct = blob.copyOfRange(1 + ivLen, blob.size)
@@ -79,7 +89,10 @@ class BiometricHelper(private val activity: FragmentActivity, private val store:
         } catch (e: KeyPermanentlyInvalidatedException) {
             // New fingerprint enrolled: biometric unlock is revoked, PIN required.
             store.clearBio(); ks().deleteEntry(alias)
-            return onFail("Biometrics changed — use your PIN")
+            return onFail("Biometrics changed - use your PIN")
+        } catch (e: Exception) {
+            store.clearBio(); runCatching { ks().deleteEntry(alias) }
+            return onFail("Biometric unlock is unavailable - use your PIN")
         }
         prompt(cipher, "Unlock KryptSafe", { c -> onKey(c.doFinal(ct)) }, onFail)
     }
